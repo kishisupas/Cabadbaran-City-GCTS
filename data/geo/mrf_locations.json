@@ -1,0 +1,223 @@
+[
+  {
+    "_placeholder": false,
+    "_placeholder_note": "MRF COORDINATES ARE SURVEYED -- all 31 were measured at the facility and are used exactly as supplied; every MRF entry carries `surveyed`: true. BOUNDARIES ARE NOT: the barangay outlines in barangay_zones.geojson are still generated shapes drawn around each barangay's published centre, so they decide where the map opens and nothing more. Re-import or correct a facility with tools/import_mrf_survey.py, or from the City Hall Admin MRF page. See docs/DATA_REQUIREMENTS.md."
+  },
+  {
+    "barangay_id": "brgy-01",
+    "name": "Antonio Luna MRF",
+    "lat": 9.084342,
+    "lng": 125.592467,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-02",
+    "name": "Bay-ang MRF",
+    "lat": 9.102442,
+    "lng": 125.577681,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-03",
+    "name": "Bayabas MRF",
+    "lat": 9.134858,
+    "lng": 125.591564,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-04",
+    "name": "Caasinan MRF",
+    "lat": 9.138058,
+    "lng": 125.525847,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-05",
+    "name": "Cabinet MRF",
+    "lat": 9.124722,
+    "lng": 125.527119,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-06",
+    "name": "Calamba MRF",
+    "lat": 9.098347,
+    "lng": 125.600111,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-07",
+    "name": "Calibunan MRF",
+    "lat": 9.101486,
+    "lng": 125.534394,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-08",
+    "name": "Comagascas MRF",
+    "lat": 9.137533,
+    "lng": 125.559175,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-09",
+    "name": "Concepcion MRF",
+    "lat": 9.188753,
+    "lng": 125.576178,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-10",
+    "name": "Del Pilar MRF",
+    "lat": 9.154669,
+    "lng": 125.578583,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-11",
+    "name": "Katugasan MRF",
+    "lat": 9.139856,
+    "lng": 125.573383,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-12",
+    "name": "Kauswagan MRF",
+    "lat": 9.134856,
+    "lng": 125.542967,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-13",
+    "name": "La Union MRF",
+    "lat": 9.081367,
+    "lng": 125.536956,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-14",
+    "name": "Mabini MRF",
+    "lat": 9.114697,
+    "lng": 125.575656,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-15",
+    "name": "Mahaba MRF",
+    "lat": 9.104383,
+    "lng": 125.630358,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-16",
+    "name": "Poblacion 1 MRF",
+    "lat": 9.121294,
+    "lng": 125.528914,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-17",
+    "name": "Poblacion 2 MRF",
+    "lat": 9.125739,
+    "lng": 125.532675,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-18",
+    "name": "Poblacion 3 MRF",
+    "lat": 9.125161,
+    "lng": 125.531644,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-19",
+    "name": "Poblacion 4 MRF",
+    "lat": 9.111997,
+    "lng": 125.532067,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-20",
+    "name": "Poblacion 5 MRF",
+    "lat": 9.118933,
+    "lng": 125.533194,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-21",
+    "name": "Poblacion 6 MRF",
+    "lat": 9.124686,
+    "lng": 125.534178,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-22",
+    "name": "Poblacion 7 MRF",
+    "lat": 9.125303,
+    "lng": 125.536606,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-23",
+    "name": "Poblacion 8 MRF",
+    "lat": 9.122303,
+    "lng": 125.537264,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-24",
+    "name": "Poblacion 9 MRF",
+    "lat": 9.122625,
+    "lng": 125.539608,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-25",
+    "name": "Poblacion 10 MRF",
+    "lat": 9.120603,
+    "lng": 125.536778,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-26",
+    "name": "Poblacion 11 MRF",
+    "lat": 9.114042,
+    "lng": 125.533908,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-27",
+    "name": "Poblacion 12 MRF",
+    "lat": 9.113186,
+    "lng": 125.538833,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-28",
+    "name": "Puting Bato MRF",
+    "lat": 9.127211,
+    "lng": 125.624044,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-29",
+    "name": "Sanghan MRF",
+    "lat": 9.086208,
+    "lng": 125.572256,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-30",
+    "name": "Soriano MRF",
+    "lat": 9.098139,
+    "lng": 125.563642,
+    "surveyed": true
+  },
+  {
+    "barangay_id": "brgy-31",
+    "name": "Tolosa MRF",
+    "lat": 9.119858,
+    "lng": 125.523933,
+    "surveyed": true
+  }
+]

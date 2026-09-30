@@ -1,0 +1,6 @@
+{
+  "type": "FeatureCollection",
+  "_placeholder": true,
+  "_note": "PLACEHOLDER -- replace this file with real data. See docs/DATA_REQUIREMENTS.md. Delete the _placeholder flag when the data is real, or the app will keep treating this file as a stub. Until then HOTSPOT_SOURCE='derived' computes hotspots from collection and report data.",
+  "features": []
+}
