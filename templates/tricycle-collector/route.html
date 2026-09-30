@@ -1,0 +1,254 @@
+{% extends 'shell.html' %}
+{% from 'partials/icons.html' import icon %}
+{% from 'partials/macros.html' import status, empty, search_input, filter_select %}
+
+{% block head %}{% include 'partials/map_assets.html' %}{% endblock %}
+
+{% block page %}
+
+<div class="page__head">
+  <div>
+    <h1 class="page__title">Property Collection</h1>
+    <p class="page__sub">
+      {% if assignment %}
+        Brgy. {{ barangay }} · {{ assignment.tricycle_code }}
+      {% else %}
+        No route assigned yet
+      {% endif %}
+    </p>
+  </div>
+</div>
+
+{% include 'partials/duty_toggle.html' %}
+
+{# ---- Where I am -------------------------------------------------------
+   The collector's own map, tracking this device. It follows them whether or
+   not they are On Duty -- On Duty is what publishes their position to
+   everyone else's map, not what lets them see their own.                  #}
+<section class="card">
+  <div class="card__body card__body--flush" style="padding:var(--sp-3)">
+    {% with map_title = 'My location',
+            map_follow = user.vehicle or 'me',
+            map_locate_zoom = 17,
+            show_mrfs = false,
+            show_tabs = false,
+            show_barangay_filter = false %}
+      {% include 'partials/live_map.html' %}
+    {% endwith %}
+  </div>
+</section>
+
+
+{# ---- Today's schedule ------------------------------------------------- #}
+<section class="today-strip" aria-label="Today's schedule">
+  <div class="today-card">
+    <span class="today-card__icon" aria-hidden="true">{{ icon('calendar') }}</span>
+    <div>
+      <p class="today-card__label">Today's Schedule</p>
+      <p class="today-card__value">{{ now.strftime('%A') }}<br>{{ today_date }}</p>
+    </div>
+  </div>
+
+  <div class="today-card">
+    <span class="today-card__icon" aria-hidden="true">
+      <span class="chip__swatch swatch-{{ today_row.tone }}" style="width:16px;height:16px"></span>
+    </span>
+    <div>
+      <p class="today-card__label">Today's Waste Type</p>
+      <p class="today-card__value">{{ today_row.waste_type }}</p>
+      {% if today_row.details %}
+        <p class="text-xs muted">{{ today_row.details|join(' · ') }}</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+{% if not assignment %}
+  <div class="card"><div class="card__body">
+    {{ empty('No route assigned',
+             'The City Hall Admin has not assigned you a barangay and purok coverage yet. Your route will appear here once they do.',
+             'home') }}
+  </div></div>
+
+{% elif not today_row.details %}
+  <div class="notice notice--info" role="status">
+    {{ icon('info', 'icon--sm') }}
+    <div>
+      <p class="strong">No collection scheduled today</p>
+      <p class="text-sm">
+        {{ now.strftime('%A') }} is a rest day on the city schedule. You can
+        still review your route below.
+      </p>
+    </div>
+  </div>
+{% endif %}
+
+<section class="split split--wide">
+
+  {# ---- Today's round ----------------------------------------------------
+     Four tabs over today's list only -- yesterday's is in History. Pending
+     is what is left to do, Not Collected and Collected are the day's
+     recorded stops newest first, All is every stop. The tabs, the purok
+     filter, the search and the paging are all tables.js, driven from the
+     markup below.                                                         #}
+  <div class="stack">
+    <section class="card" data-table-controller="triStops"
+             data-table-row-selector=".stop">
+      <div class="toolbar">
+        <h2 class="toolbar__title">
+          {% if assignment %}Brgy. {{ barangay }}{% else %}Your route{% endif %}
+          <span class="text-xs muted" style="font-weight:400">· {{ today_date }}</span>
+        </h2>
+        {% set tabs = [('pending', 'Pending'), ('not_collected', 'Not Collected'),
+                       ('collected', 'Collected'), ('all', 'All')] %}
+        <div class="segmented segmented--grid" role="tablist" aria-label="Which stops"
+             data-table-tabs="group">
+          {% for key, label in tabs %}
+            <button type="button" class="segmented__btn" role="tab"
+                    data-table-tab="{{ key }}"
+                    aria-selected="{{ 'true' if tab == key else 'false' }}">
+              {{ label }} <span class="sub">{{ tab_counts[key] }}</span>
+            </button>
+          {% endfor %}
+        </div>
+        <input type="hidden" data-table-filter="group"
+               value="{{ '' if tab == 'all' else tab }}">
+        {% if puroks|length > 1 %}
+          {{ filter_select('purok', 'All Puroks', puroks) }}
+        {% endif %}
+        {{ search_input('Search name', 'tri-stop-search') }}
+      </div>
+
+    <div class="stops card__body" id="triStops">
+      {% for r in rows %}
+        {% set tone = 'collected' if r.status == 'Collected'
+                      else ('not-collected' if r.status == 'Not Collected'
+                            else ('exempt' if r.exempt else 'pending')) %}
+        <a class="stop stop--{{ tone }}" data-group="{{ r.group }}"
+           data-purok="{{ r.purok }}"
+           href="{{ url_for('collector.tricycle_record', property_id=r.id) }}">
+          <span class="stop__icon" aria-hidden="true">
+            {% if r.status == 'Collected' %}{{ icon('check') }}
+            {% elif r.status == 'Not Collected' %}{{ icon('x') }}
+            {% else %}{{ icon('home') }}{% endif %}
+          </span>
+
+          <span class="stop__main">
+            <span class="stop__name">{{ r.owner_name }}</span>
+            <span class="stop__meta">
+              {% if r.type %}<span>{{ r.type }}</span>{% endif %}
+              <span>{{ r.purok }}</span>
+              {% if r.tag %}<span>{{ r.tag }}</span>{% endif %}
+            </span>
+          </span>
+
+          <span class="stop__side">
+            {% if r.exempt %}
+              <span class="badge badge--muted">None expected</span>
+            {% else %}
+              {{ status(r.status) }}
+            {% endif %}
+            {% if r.time %}<span class="stop__time">{{ r.time }}</span>{% endif %}
+          </span>
+
+          {% if r.load %}
+            <span class="stop__load">
+              {% for line in r.load %}
+                <span class="tag">{{ line.type }} — {{ line.qty }} {{ line.unit|unit(line.qty) }}</span>
+              {% endfor %}
+            </span>
+          {% elif r.reason %}
+            <span class="stop__load">
+              <span class="badge badge--danger">{{ r.reason }}</span>
+              {% if r.disputed %}<span class="badge badge--warning">Disputed</span>{% endif %}
+            </span>
+          {% elif r.exempt %}
+            <span class="stop__load">
+              <span class="text-xs muted">{{ r.exempt_note }}</span>
+            </span>
+          {% endif %}
+        </a>
+      {% endfor %}
+    </div>
+
+      {% if rows %}
+        <div data-table-empty hidden>
+          {{ empty('Nothing here right now',
+                   'No stop matches this tab, purok or search. Try the All tab.',
+                   'search') }}
+        </div>
+      {% else %}
+        <div class="card__body">
+          {{ empty('No properties on your route',
+                   'No households or establishments are registered in your purok coverage yet. The barangay admin adds them in their Property List.',
+                   'home') }}
+        </div>
+      {% endif %}
+
+      <div class="card__foot">
+        <span class="text-xs muted" data-table-count></span>
+      </div>
+    </section>
+  </div>
+
+  {# ---- Progress + running load ---------------------------------------- #}
+  <div class="stack">
+    <div class="card">
+      <div class="card__head"><h2 class="card__title">Today's Progress</h2></div>
+      <div class="card__body route-progress">
+        <div class="route-progress__head">
+          {# Against what today actually asks for, not the whole register:
+             a property whose tag exempts it today is not a miss. #}
+          <span class="route-progress__count">
+            {{ counts.collected }}<small> / {{ counts.expected }}</small>
+          </span>
+          <span class="badge badge--info">{{ counts.percent }}% done</span>
+        </div>
+
+        <div class="progress" role="progressbar" aria-valuenow="{{ counts.percent }}"
+             aria-valuemin="0" aria-valuemax="100" aria-label="Route completion">
+          <div class="progress__bar" style="width:{{ counts.percent }}%"></div>
+        </div>
+
+        <dl class="route-legend">
+          <div><dd>{{ counts.collected }}</dd><dt>Collected</dt></div>
+          <div><dd>{{ counts.pending }}</dd><dt>Pending</dt></div>
+          <div><dd>{{ counts.not_collected }}</dd><dt>Not collected</dt></div>
+          {% if counts.exempt %}
+            <div><dd>{{ counts.exempt }}</dd><dt>None expected</dt></div>
+          {% endif %}
+        </dl>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card__head"><h2 class="card__title">Overall Collected Load</h2></div>
+      <div class="card__body">
+        {% if not totals.empty %}
+          <dl class="dlist">
+            {% for line in totals.lines | by_waste_type %}
+              <div class="dlist__row">
+                <dt class="dlist__key">{{ line.label }}</dt>
+                <dd class="dlist__val">{{ line.display }}</dd>
+              </div>
+            {% endfor %}
+            <div class="dlist__row dlist__row--total">
+              <dt>Total</dt>
+              <dd class="dlist__val">{{ totals.total }}</dd>
+            </div>
+          </dl>
+          <p class="field__hint">
+            {{ icon('info', 'icon--sm') }}
+            Sacks and kilos are totalled separately — they are different units.
+          </p>
+        {% else %}
+          {{ empty('Nothing recorded yet',
+                   'Collected loads will total up here as you work through the route.',
+                   'package') }}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

@@ -1,0 +1,311 @@
+{% extends 'shell.html' %}
+{% from 'partials/mrf_detail.html' import pickup_button, delivery_button,
+                                          pickup_modal, delivery_modal %}
+{% from 'partials/icons.html' import icon %}
+{% from 'partials/macros.html' import stat, status, filter_select, th, empty %}
+
+{% block page %}
+
+<div class="page__head">
+  <div>
+    <h1 class="page__title">MRF</h1>
+    <p class="page__sub">
+      Pickup status of all {{ counts.total }} barangay MRFs, and what has
+      reached the landfill.
+    </p>
+  </div>
+  <div class="page__actions">
+    {# The field and the button both open the calendar, and picking a date
+       applies it -- see DateField in app.js. The button stays a submit so it
+       still works with JavaScript off. #}
+    <form method="get" class="datepick">
+      <div class="field">
+        <label class="field__label" for="date">Date</label>
+        <input class="field__input" type="date" id="date" name="date"
+               value="{{ selected_date }}" data-date-submit>
+      </div>
+      <button type="submit" class="btn btn--secondary" data-date-picker="date">
+        {{ icon('calendar', 'icon--sm') }} View
+      </button>
+    </form>
+  </div>
+</div>
+
+<section class="grid grid--stats" aria-label="MRF collection summary">
+  {% set tones = ['warning', 'danger', 'success', 'info'] %}
+  {% for label, value, hint, ico in stats %}
+    {{ stat(label, value, hint, ico, tones[loop.index0]) }}
+  {% endfor %}
+</section>
+
+{# ---- Overall collected load ------------------------------------------
+   Computed up the chain: household entries -> barangay load -> MRF pickup
+   -> here. Sacks and kilos are kept apart because they are different units. #}
+<section class="card">
+  <div class="card__head">
+    <div>
+      <h2 class="card__title">Overall Collected Load</h2>
+      <p class="text-sm muted">Totalled across every MRF collected on this date.</p>
+    </div>
+  </div>
+  <div class="card__body">
+    {% if not load.empty %}
+      <dl class="dlist">
+        {% for line in load.lines | by_waste_type %}
+          <div class="dlist__row">
+            <dt class="dlist__key">{{ line.label }}</dt>
+            <dd class="dlist__val">{{ line.display }}</dd>
+          </div>
+        {% endfor %}
+        <div class="dlist__row dlist__row--total">
+          <dt>Total</dt>
+          <dd class="dlist__val">{{ load.total }}</dd>
+        </div>
+      </dl>
+    {% else %}
+      {{ empty('Nothing collected yet',
+               'Loads appear here as trucks record their MRF pickups.', 'package') }}
+    {% endif %}
+  </div>
+</section>
+
+{# ---- MRF pickup table -------------------------------------------------- #}
+{% if located.approximated %}
+  <div class="notice" role="status">
+    {{ icon('map-pin', 'icon--sm') }}
+    <div>
+      <p class="strong">
+        {{ located.surveyed }} of {{ located.total }} MRF locations are exact
+        · {{ located.approximated }} still approximate
+      </p>
+      <p class="text-sm">
+        An approximate pin sits near its barangay's centre, not at the
+        facility. Use <span class="strong">Set location</span> on a row to
+        enter the real coordinates — from a GPS reading taken at the gate, in
+        either decimal degrees or degrees-minutes-seconds.
+      </p>
+    </div>
+  </div>
+{% endif %}
+
+<section class="card" data-table-controller="mrfTable">
+  <div class="toolbar">
+    <h2 class="toolbar__title">MRF Pickups</h2>
+    {{ filter_select('barangay', 'All Barangay', barangays) }}
+    {{ filter_select('truck', 'All Truck', trucks) }}
+    {{ filter_select('status', 'All Status', statuses) }}
+  </div>
+
+  <div class="table-wrap">
+    <table class="table" id="mrfTable">
+      <caption class="sr-only">Pickup status of each barangay MRF</caption>
+      <thead>
+        <tr>
+          {{ th('Barangay', 'barangay', w='21%') }}
+          {{ th('Source Schedule Day', w='15%') }}
+          {{ th('Waste Type', w='24%') }}
+          {{ th('Assigned Truck', 'truck', w='16%') }}
+          {{ th('Status', 'status', w='17%') }}
+          <th scope="col" style="width:80px" class="table__actions"><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+          <tr data-barangay="{{ r.barangay_id }}" data-truck="{{ r.truck }}"
+              data-status="{{ r.status }}">
+            <td data-label="Barangay">
+              <span class="strong">{{ r.barangay }}</span>
+              {% if r.property_count %}
+                <span class="sub">{{ r.property_count }} household{{ '' if r.property_count == 1 else 's' }} waiting</span>
+              {% endif %}
+            </td>
+            <td data-label="Source Day">{{ r.source_schedule_day }}</td>
+            <td data-label="Waste Type">
+              {{ r.waste_type }}
+              {% if r.load.lines %}
+                <div class="tags">
+                  {% for line in r.load.lines | by_waste_type %}
+                    <span class="tag">{{ line.label }} — {{ line.display }}</span>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </td>
+            <td data-label="Truck"><span class="mono">{{ r.truck }}</span></td>
+            <td data-label="Status">
+              {{ status(r.status) }}
+              {% if r.auto_missed %}
+                <span class="badge badge--muted">Auto</span>
+              {% endif %}
+              {# The load this pickup took away had been waiting since an
+                 earlier day. Saying so here is what makes a collected
+                 carry-over visible on the day it was finally collected. #}
+              {% if not r.location.surveyed %}
+                <span class="badge badge--muted"
+                      title="This MRF sits near its barangay's centre on the map, not at the facility">
+                  Approx. location
+                </span>
+              {% endif %}
+              {% if r.carry_over %}
+                <span class="badge badge--info">Carry-over</span>
+                <span class="sub">
+                  Missed {{ r.carry_over.missed_count }}×, first on
+                  {{ r.carry_over.first_missed_display }}
+                </span>
+              {% endif %}
+            </td>
+            <td class="table__actions">
+              {{ pickup_button(r, r.barangay) }}
+
+              <button type="button" class="btn btn--icon"
+                      data-modal-open="mrf-location"
+                      data-set-barangayid="{{ r.barangay_id }}"
+                      data-set-title="{{ r.mrf_name }}"
+                      data-set-lat="{{ r.location.lat if r.location.lat is not none else '' }}"
+                      data-set-lng="{{ r.location.lng if r.location.lng is not none else '' }}"
+                      data-set-known="{{ 'Yes' if r.location.surveyed else '' }}"
+                      aria-label="Set the map location of {{ r.barangay }} MRF">
+                {{ icon('map-pin', 'icon--sm') }}
+              </button>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div data-table-empty {% if rows %}hidden{% endif %}>
+    {{ empty('No MRFs match', 'Adjust the filters or pick another date.', 'recycle') }}
+  </div>
+
+  <div class="card__foot"><span class="text-xs muted" data-table-count></span></div>
+</section>
+
+{# ---- Delivered to landfill --------------------------------------------- #}
+<section class="card" data-table-controller="deliveryTable">
+  <div class="card__head">
+    <h2 class="card__title">Delivered to Landfill</h2>
+    <span class="badge badge--info">{{ deliveries|length }}</span>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table" id="deliveryTable">
+      <caption class="sr-only">Loads delivered to final disposal</caption>
+      <thead>
+        <tr>
+          {{ th('Assigned Truck', w='16%') }}
+          {{ th('Source Schedule Day', w='15%') }}
+          {{ th('Load', w='15%') }}
+          {{ th('Barangays Included', w='29%') }}
+          {{ th('Time', w='18%') }}
+          <th scope="col" style="width:80px" class="table__actions"><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in deliveries %}
+          <tr>
+            <td data-label="Truck"><span class="mono strong">{{ d.truck_code }}</span></td>
+            <td data-label="Source Day">{{ d.schedule_day }}</td>
+            <td data-label="Load">{{ d.load.total }}</td>
+            <td data-label="Barangays">
+              <div class="tags">
+                {% for b in d.barangays %}<span class="tag">{{ b }}</span>{% endfor %}
+              </div>
+            </td>
+            <td data-label="Time" class="muted text-xs">{{ d.time_display }}</td>
+            <td class="table__actions">
+              {{ delivery_button(d) }}
+            </td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="6">
+              {{ empty('No deliveries yet',
+                       'Landfill deliveries recorded by the trucks appear here.', 'truck') }}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{# ---- Dialogs ---------------------------------------------------------- #}
+{{ pickup_modal() }}
+
+{# ---- Set MRF location -------------------------------------------------
+   Coordinates are the one piece of a facility's record the system cannot work
+   out for itself, and the person who notices a pin is in the wrong place is
+   the admin looking at this page. Both formats are accepted because the city
+   sends readings in degrees-minutes-seconds and converting by hand is exactly
+   where transcription errors come from. #}
+<div class="modal" id="mrf-location" data-open="false" role="dialog"
+     aria-modal="true" aria-labelledby="mrf-location-title" aria-hidden="true">
+  <form class="modal__panel" method="post"
+        action="{{ url_for('city.mrf_location') }}" data-validate novalidate>
+    {{ csrf_field() }}
+    <input type="hidden" name="barangay_id" data-fill-value="barangayid">
+    <input type="hidden" name="return_date" value="{{ filters.date }}">
+    <input type="hidden" name="return_barangay" value="{{ filters.barangay }}">
+    <input type="hidden" name="return_truck" value="{{ filters.truck }}">
+    <input type="hidden" name="return_status" value="{{ filters.status }}">
+
+    <div class="modal__head">
+      <h2 id="mrf-location-title">Set location — <span data-fill="title">MRF</span></h2>
+      <button type="button" class="btn btn--icon" data-modal-close
+              aria-label="Close dialog">{{ icon('x', 'icon--sm') }}</button>
+    </div>
+
+    <div class="modal__body">
+      <p class="text-sm muted" data-show-when-set="known">
+        This facility already has a known position. Saving replaces it.
+      </p>
+      <p class="text-sm muted" data-show-when="known:">
+        This facility has no known position yet — the map is showing an
+        approximation near the barangay's centre.
+      </p>
+
+      <div class="grid grid--2" style="margin-top:var(--sp-3)">
+        <div class="field">
+          <label class="field__label" for="mrf-lat">Latitude</label>
+          <input class="field__input" id="mrf-lat" name="lat" required
+                 data-fill-value="lat" autocomplete="off"
+                 placeholder="9.124722">
+          <span class="field__hint">North of the equator, so positive.</span>
+        </div>
+        <div class="field">
+          <label class="field__label" for="mrf-lng">Longitude</label>
+          <input class="field__input" id="mrf-lng" name="lng" required
+                 data-fill-value="lng" autocomplete="off"
+                 placeholder="125.527119">
+          <span class="field__hint">Around 125.5 for Cabadbaran.</span>
+        </div>
+      </div>
+
+      <div class="field" style="margin-top:var(--sp-3)">
+        <label class="field__label" for="mrf-loc-note">Note (optional)</label>
+        <input class="field__input" id="mrf-loc-note" name="note"
+               maxlength="200" autocomplete="off"
+               placeholder="e.g. taken at the gate, 4 m accuracy">
+      </div>
+
+      <p class="text-xs muted" style="margin-top:var(--sp-3)">
+        Decimal degrees (9.124722) or degrees-minutes-seconds
+        (9°07'29.00"N) both work. Stand at the gate where the truck stops
+        rather than inside the compound — the map and any future route
+        planning use this as the truck's stop.
+      </p>
+    </div>
+
+    <div class="modal__foot">
+      <button type="submit" name="action" value="clear"
+              class="btn btn--ghost" data-show-when-set="known"
+              formnovalidate>Clear location</button>
+      <button type="button" class="btn btn--secondary" data-modal-close>Cancel</button>
+      <button type="submit" class="btn btn--primary">Save location</button>
+    </div>
+  </form>
+</div>
+
+{{ delivery_modal() }}
+
+{% endblock %}

@@ -1,0 +1,305 @@
+{% extends 'shell.html' %}
+{% from 'partials/icons.html' import icon %}
+{% from 'partials/macros.html' import th, empty %}
+
+{% block page %}
+
+<div class="page__head">
+  <div>
+    <h1 class="page__title">History &amp; Reports</h1>
+    <p class="page__sub">Daily summaries, and exports over any date range.</p>
+  </div>
+</div>
+
+<section class="split split--wide">
+
+  {# ---- History feed --------------------------------------------------- #}
+  <div class="stack">
+    <section class="card">
+      <div class="card__head">
+        <div>
+          <h2 class="card__title">History Records</h2>
+          <p class="text-xs muted">
+            Click a day to report on it · Shift-click another to cover the range between
+          </p>
+        </div>
+        {# A GET form, so the page size is part of the URL and survives a
+           refresh. Changing it goes back to page 1. #}
+        <form method="get" class="history-size">
+          <label class="text-xs muted" for="history-per">Show</label>
+          <select class="field__select field__select--sm" id="history-per" name="per"
+                  data-autosubmit>
+            {% for size in history_page.sizes %}
+              <option value="{{ size }}" {% if size == history_page.per %}selected{% endif %}>
+                {{ size }} days
+              </option>
+            {% endfor %}
+          </select>
+          <noscript><button type="submit" class="btn btn--secondary btn--sm">Apply</button></noscript>
+        </form>
+      </div>
+
+      {# Each day is a button that fills the report form's dates -- the card
+         already says which day, so retyping it into two date pickers was the
+         slow part. The divider between days is the stronger history-list one:
+         with every card shaped alike, a faint line let neighbouring days
+         blur into one. #}
+      <div class="card__body card__body--flush history-list" data-report-days>
+        {% for day in feed %}
+          <article class="entry entry--pickable" role="button" tabindex="0"
+                   data-report-day="{{ day.date }}"
+                   aria-label="Use {{ day.date_display }} as the report's date range">
+            <div style="min-width:0">
+              <h3 class="entry__title">
+                {{ day.label }} — {{ day.date_display }}
+                {% if day.is_today %}<span class="badge badge--info">Live</span>
+                {% elif day.is_frozen %}<span class="badge badge--muted">Final</span>{% endif %}
+              </h3>
+
+              {% if day.had_activity %}
+                <p class="entry__sub">
+                  {{ day.properties.collected }} of {{ day.properties.total }} properties
+                  collected ({{ day.properties.percent }}%)
+                  · {{ day.properties.not_collected }} not collected
+                </p>
+                <div class="entry__load">
+                  <div class="entry__load-row">
+                    <span>Collected load</span><span>{{ day.load.total }}</span>
+                  </div>
+                  <div class="entry__load-row">
+                    <span>MRFs collected</span>
+                    <span>{{ day.mrf.collected }} of {{ day.mrf.total }}</span>
+                  </div>
+                  {% if day.mrf.missed %}
+                    <div class="entry__load-row">
+                      <span>Missed pickups</span><span>{{ day.mrf.missed }}</span>
+                    </div>
+                  {% endif %}
+                  {% if day.deliveries.count %}
+                    <div class="entry__load-row">
+                      <span>Landfill deliveries</span><span>{{ day.deliveries.count }}</span>
+                    </div>
+                  {% endif %}
+                </div>
+              {% else %}
+                <p class="entry__sub muted">No collection activity recorded.</p>
+              {% endif %}
+            </div>
+
+            <div class="entry__meta">
+              <span class="mono">{{ day.weekday }}</span>
+              {% if day.carry_overs_opened %}
+                <span class="badge badge--warning">
+                  {{ day.carry_overs_opened }} carry-over{{ '' if day.carry_overs_opened == 1 else 's' }}
+                </span>
+              {% endif %}
+              {# The day in full. Clicking the card still fills the report
+                 dates; this link is its own action and opens the day page. #}
+              <a class="btn btn--secondary btn--sm"
+                 href="{{ url_for('city.history_day', day=day.date) }}"
+                 aria-label="View the details of {{ day.date_display }}">
+                {{ icon('eye', 'icon--sm') }} View details
+              </a>
+            </div>
+          </article>
+        {% else %}
+          {{ empty('No history yet', 'Daily summaries appear here as days pass.', 'file') }}
+        {% endfor %}
+      </div>
+
+      <div class="card__foot">
+        <span class="text-xs muted">
+          Days {{ history_page.first }}–{{ history_page.last }} of {{ history_page.total }}
+          · Page {{ history_page.page }} of {{ history_page.pages }}
+        </span>
+        <nav class="pager" aria-label="History pages">
+          {% if history_page.page > 1 %}
+            <a class="btn btn--secondary btn--sm"
+               href="{{ url_for('city.reports', per=history_page.per, page=history_page.page - 1) }}">
+              {{ icon('chevron-left', 'icon--sm') }} Newer
+            </a>
+          {% else %}
+            <span class="btn btn--secondary btn--sm" aria-disabled="true">
+              {{ icon('chevron-left', 'icon--sm') }} Newer
+            </span>
+          {% endif %}
+          {% if history_page.page < history_page.pages %}
+            <a class="btn btn--secondary btn--sm"
+               href="{{ url_for('city.reports', per=history_page.per, page=history_page.page + 1) }}">
+              Older {{ icon('chevron-right', 'icon--sm') }}
+            </a>
+          {% else %}
+            <span class="btn btn--secondary btn--sm" aria-disabled="true">
+              Older {{ icon('chevron-right', 'icon--sm') }}
+            </span>
+          {% endif %}
+        </nav>
+      </div>
+      <div class="card__foot" style="border-block-start:0;padding-block-start:0">
+        <span class="text-xs muted">
+          {{ icon('info', 'icon--sm') }}
+          A day is frozen once it closes, so figures already reported cannot change.
+        </span>
+      </div>
+    </section>
+  </div>
+
+  {# ---- Generate report ------------------------------------------------ #}
+  <div class="stack">
+    <section class="card">
+      <div class="card__head"><h2 class="card__title">Generate Report</h2></div>
+
+      <form class="card__body form" method="post" data-validate novalidate
+            id="report-form">
+        {{ csrf_field() }}
+        {# Keeps the history panel on the page the admin was reading. #}
+        <input type="hidden" name="per" value="{{ history_page.per }}">
+        <input type="hidden" name="page" value="{{ history_page.page }}">
+
+        <div class="field">
+          <label class="field__label" for="report_type">
+            Report Type<span class="field__req" aria-hidden="true">*</span>
+          </label>
+          <select class="field__select" id="report_type" name="report_type" required>
+            <option value="">Select a report…</option>
+            {% for value, label in report_types %}
+              <option value="{{ value }}"
+                      {% if form.get('report_type') == value %}selected{% endif %}>
+                {{ label }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form__grid form__grid--2">
+          <div class="field">
+            <label class="field__label" for="start_date">
+              Starting Date<span class="field__req" aria-hidden="true">*</span>
+            </label>
+            <input class="field__input" type="date" id="start_date" name="start_date"
+                   required max="{{ today }}" value="{{ form.get('start_date', '') }}">
+          </div>
+          <div class="field">
+            <label class="field__label" for="end_date">
+              End Date<span class="field__req" aria-hidden="true">*</span>
+            </label>
+            <input class="field__input" type="date" id="end_date" name="end_date"
+                   required max="{{ today }}" value="{{ form.get('end_date', today) }}">
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="barangay">
+            Barangay <span class="muted">(optional)</span>
+          </label>
+          <select class="field__select" id="barangay" name="barangay">
+            <option value="">All barangays</option>
+            {% for value, label in barangays %}
+              <option value="{{ value }}"
+                      {% if form.get('barangay') == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <button type="submit" class="btn btn--primary btn--block">
+          {{ icon('file', 'icon--sm') }} Generate
+        </button>
+      </form>
+    </section>
+
+    {# ---- Result --------------------------------------------------------
+       Shown inline, with the same rows offered as a printable page and as
+       CSV. All three re-post identical parameters through one build, so the
+       screen, the printout, and the spreadsheet cannot disagree.          #}
+    {% if generated %}
+      <section class="card">
+        <div class="card__head">
+          <div>
+            <h2 class="card__title">{{ generated.title }}</h2>
+            <p class="text-sm muted">
+              {{ generated.meta.start_display }} – {{ generated.meta.end_display }}
+              · {{ generated.meta.barangay }}
+            </p>
+          </div>
+          <span class="badge badge--info">{{ generated.rows|length }} rows</span>
+        </div>
+
+        <div class="card__body stack">
+          <dl class="dlist">
+            {% for label, value in generated.summary %}
+              <div class="dlist__row">
+                <dt class="dlist__key">{{ label }}</dt>
+                <dd class="dlist__val">{{ value }}</dd>
+              </div>
+            {% endfor %}
+          </dl>
+
+          <div class="row" style="gap:var(--sp-2)">
+            <form method="post" action="{{ url_for('city.report_print') }}" target="_blank">
+              {{ csrf_field() }}
+              <input type="hidden" name="report_type" value="{{ generated.type }}">
+              <input type="hidden" name="start_date" value="{{ generated.meta.start }}">
+              <input type="hidden" name="end_date" value="{{ generated.meta.end }}">
+              <input type="hidden" name="barangay" value="{{ form.get('barangay', '') }}">
+              <button type="submit" class="btn btn--secondary">
+                {{ icon('file', 'icon--sm') }} Printable page
+              </button>
+            </form>
+
+            <form method="post" action="{{ url_for('city.report_csv') }}">
+              {{ csrf_field() }}
+              <input type="hidden" name="report_type" value="{{ generated.type }}">
+              <input type="hidden" name="start_date" value="{{ generated.meta.start }}">
+              <input type="hidden" name="end_date" value="{{ generated.meta.end }}">
+              <input type="hidden" name="barangay" value="{{ form.get('barangay', '') }}">
+              <button type="submit" class="btn btn--secondary">
+                {{ icon('download', 'icon--sm') }} Download CSV
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {% if generated.rows %}
+          <div data-table-controller="reportRows">
+          <div class="table-wrap">
+            <table class="table" id="reportRows">
+              <caption class="sr-only">{{ generated.title }} rows</caption>
+              <thead>
+                <tr>{% for c in generated.columns %}<th scope="col">{{ c }}</th>{% endfor %}</tr>
+              </thead>
+              <tbody>
+                {% for row in generated.rows[:50] %}
+                  <tr>
+                    {% for cell in row %}
+                      <td data-label="{{ generated.columns[loop.index0] }}">{{ cell }}</td>
+                    {% endfor %}
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          </div>
+          {% if generated.rows|length > 50 %}
+            <div class="card__foot">
+              <span class="text-xs muted">
+                Showing the first 50 of {{ generated.rows|length }} rows. The
+                printable page and the CSV contain all of them.
+              </span>
+            </div>
+          {% endif %}
+        {% else %}
+          <div class="card__body">
+            {{ empty('No records in this range',
+                     'Nothing was recorded between those dates.', 'file') }}
+          </div>
+        {% endif %}
+      </section>
+    {% endif %}
+  </div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ asset('js/report-history.js') }}" defer></script>
+{% endblock %}

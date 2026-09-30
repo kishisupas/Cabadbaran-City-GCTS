@@ -1,0 +1,385 @@
+{% extends 'shell.html' %}
+{% from 'partials/icons.html' import icon %}
+{% from 'partials/macros.html' import stat, status, status_code, status_legend,
+                                      filter_select, th, empty %}
+
+{% block page %}
+
+<div class="page__head">
+  <div>
+    <h1 class="page__title">Carry-Over</h1>
+    <p class="page__sub">
+      MRF loads a truck could not collect, in three stages:
+      <span class="strong">Missed Collection</span> is waiting on you,
+      <span class="strong">Pending</span> has a truck and a date,
+      <span class="strong">Collected</span> is the record of loads finally
+      picked up.
+    </p>
+  </div>
+</div>
+
+<section class="grid grid--stats" aria-label="Carry-over summary">
+  {% set tones = ['warning', 'danger', 'danger', 'success'] %}
+  {% for label, value, hint, ico in stats %}
+    {{ stat(label, value, hint, ico, tones[loop.index0]) }}
+  {% endfor %}
+</section>
+
+{% if selected_status == 'Missed Collection' and (counts.unassigned or counts.undated) %}
+  <div class="notice" role="status">
+    {{ icon('alert', 'icon--sm') }}
+    <div>
+      <p class="strong">
+        {% if counts.unassigned %}
+          {{ counts.unassigned }} carry-over{{ '' if counts.unassigned == 1 else 's' }}
+          still need{{ 's' if counts.unassigned == 1 else '' }} a truck
+        {% endif %}
+        {% if counts.unassigned and counts.undated %} · {% endif %}
+        {% if counts.undated %}
+          {{ counts.undated }} still need{{ 's' if counts.undated == 1 else '' }}
+          a collection date
+        {% endif %}
+      </p>
+      <p class="text-sm">
+        Until a carry-over has <span class="strong">both</span> a truck and a
+        date, nobody is coming for it and the waste stays in the MRF. Set both
+        and it moves to <span class="strong">Pending</span>. Each row below
+        says which one it is waiting on.
+      </p>
+    </div>
+  </div>
+{% endif %}
+
+<section class="card" data-table-controller="carryTable">
+  <div class="toolbar">
+    <h2 class="toolbar__title">
+      {{ selected_status }} Carry-Overs
+    </h2>
+
+    {# Links, not a <select>: each view is fetched, because the other stages
+       are filtered out server-side rather than hidden in the page. Each is
+       also a URL an admin can bookmark. #}
+    {% set tabs = [('Missed Collection', counts.missed),
+                   ('Pending', counts.pending),
+                   ('Collected', counts.collected)] %}
+    <div class="segmented" role="tablist" aria-label="Carry-over stage">
+      {% for label, count in tabs %}
+        <a class="segmented__btn" role="tab"
+           href="{{ url_for('city.carry_over', status=label) }}"
+           aria-selected="{{ 'true' if selected_status == label else 'false' }}">
+          {{ label }} <span class="sub">{{ count }}</span>
+        </a>
+      {% endfor %}
+    </div>
+
+    {{ filter_select('barangay', 'All Barangay', barangays) }}
+  </div>
+
+  {{ status_legend(statuses) }}
+
+  <div class="table-wrap">
+    <table class="table" id="carryTable">
+      <caption class="sr-only">Missed MRF pickups carried over to another schedule</caption>
+      <thead>
+        <tr>
+          {# Waste Type has no width on purpose: it holds the only variable-
+             length content, so it takes whatever the fixed columns leave. #}
+          {{ th('Barangay', 'barangay', w='12%') }}
+          {{ th('Source Schedule Day', w='12%') }}
+          {{ th('Waste Type') }}
+          {{ th('Original Truck', w='8%') }}
+          {{ th('Current Truck', w='8%') }}
+          {{ th('Rescheduled To', w='10%') }}
+          {{ th('Status', 'status', w='12%') }}
+          <th scope="col" style="width:248px" class="table__actions"><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+          <tr data-barangay="{{ r.barangay_id }}" data-status="{{ r.status }}">
+            <td data-label="Barangay">
+              <span class="strong">{{ r.barangay }}</span>
+              {% if r.missed_count and r.missed_count > 1 %}
+                <span class="sub">Missed {{ r.missed_count }} times</span>
+              {% endif %}
+            </td>
+            <td data-label="Source Day">{{ r.source_schedule_day or '—' }}</td>
+            <td data-label="Waste Type">
+              {{ r.waste_type or '—' }}
+              {% if r.lines %}
+                {# A plain list, not pills: five pills stacked in one cell made
+                   a single row taller than the rest of the table. #}
+                <div class="cell-list" style="margin-top:var(--sp-1)">
+                  {% for line in r.lines | by_waste_type %}
+                    <span>{{ line.label }} — {{ line.display }}</span>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </td>
+            <td data-label="Original Truck"><span class="mono">{{ r.original_truck or '—' }}</span></td>
+            <td data-label="Current Truck"><span class="mono">{{ r.current_truck_display }}</span></td>
+            <td data-label="Rescheduled To">
+              {{ r.reschedule_display }}
+              {% if r.overdue %}<span class="badge badge--danger">Overdue</span>
+              {% elif r.due_today %}<span class="badge badge--info">Due today</span>{% endif %}
+            </td>
+            <td data-label="Status">
+              {{ status_code(r.status) }}
+              {# What this row is waiting on, said plainly. A missed carry-over
+                 is only ever one button away from being arranged, and the
+                 point of this page is to make that button obvious. Short in
+                 the cell, full sentence on hover and for a screen reader. #}
+              {% if r.missing %}
+                <span class="cell-note cell-note--warning" title="{{ r.missing }}">
+                  {{ icon('alert', 'icon--sm') }}
+                  <span aria-hidden="true">{{ r.missing_short }}</span>
+                  <span class="sr-only">{{ r.missing }}</span>
+                </span>
+              {% endif %}
+            </td>
+            <td class="table__actions">
+              <div class="actions">
+                {# One trigger, every field: which of them the dialog
+                   actually shows is decided by the stage (see below). #}
+                {% set d = r.detail %}
+                <button type="button" class="btn btn--icon"
+                        data-modal-open="carry-detail"
+                        data-set-name="{{ d.mrf_name }}"
+                        data-set-date="{{ d.date_display }}"
+                        data-set-time="{{ d.time_display }}"
+                        data-set-source="{{ d.source_schedule_day }}"
+                        data-set-waste="{{ d.waste_type }}"
+                        data-set-assigned="{{ d.assigned_truck }}"
+                        data-set-operator="{{ d.operator }}"
+                        data-set-original="{{ d.original_truck }}"
+                        data-set-current="{{ d.current_truck }}"
+                        data-set-newdate="{{ d.reschedule_display }}"
+                        data-set-total="{{ d.load.total }}"
+                        data-set-status="{{ d.status }}"
+                        data-set-missing="{{ d.missing }}"
+                        data-set-misses="{{ d.misses_display }}"
+                        data-set-place="{{ d.location.name or d.mrf_name }}"
+                        data-set-coords="{{ d.location.coords or '—' }}"
+                        data-set-coordsource="{{ d.location.source }}"
+                        data-set-reason="{{ d.reason or 'Not recorded' }}"
+                        data-set-note="{{ d.note or 'No notes recorded.' }}"
+                        aria-label="View carry-over for {{ r.barangay }}">
+                  {{ icon('eye', 'icon--sm') }}
+                </button>
+
+                {% if r.status != 'Collected' %}
+                  <button type="button" class="btn btn--secondary btn--sm"
+                          data-modal-open="carry-reassign"
+                          data-set-id="{{ r.id }}" data-set-title="{{ r.barangay }}">
+                    Reassign
+                  </button>
+                  <button type="button" class="btn btn--secondary btn--sm"
+                          data-modal-open="carry-reschedule"
+                          data-set-id="{{ r.id }}" data-set-title="{{ r.barangay }}">
+                    Reschedule
+                  </button>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div data-table-empty {% if rows %}hidden{% endif %}>
+    {% if selected_status == 'Collected' %}
+      {{ empty('Nothing collected yet',
+               'Carry-overs move here once the load is finally picked up.',
+               'check') }}
+    {% elif selected_status == 'Pending' %}
+      {{ empty('Nothing arranged yet',
+               'A carry-over moves here once you have given it both a truck and a date.',
+               'repeat') }}
+    {% else %}
+      {{ empty('No missed collections',
+               'Every MRF pickup has been completed. A load a truck could not collect appears here automatically.',
+               'check') }}
+    {% endif %}
+  </div>
+
+  <div class="card__foot">
+    <span class="text-xs muted" data-table-count></span>
+    <span class="text-xs muted">
+      A carry-over closes automatically when its barangay MRF is next collected.
+    </span>
+  </div>
+</section>
+
+{# ---- Detail dialog ---------------------------------------------------- #}
+<div class="modal" id="carry-detail" data-open="false" role="dialog"
+     aria-modal="true" aria-labelledby="carry-detail-title" aria-hidden="true">
+  <div class="modal__panel">
+    <div class="modal__head">
+      <h2 id="carry-detail-title" data-fill="name">Carry-over</h2>
+      <button type="button" class="btn btn--icon" data-modal-close aria-label="Close dialog">
+        {{ icon('x', 'icon--sm') }}
+      </button>
+    </div>
+    {# Three stages, three questions, so three sets of fields. The page shows
+       one stage at a time, so the dialog is built for that stage rather than
+       carrying rows it would have to hide.
+
+         Missed Collection -- the attempt that failed: when, who, why, where.
+         Pending           -- what has been arranged: the new date, both
+                              trucks, and how many times it has been missed.
+         Collected         -- the pickup that finally took it, which is the
+                              same set of fields the MRF page shows for that
+                              pickup, because it is the same record. #}
+    <div class="modal__body">
+      {% if selected_status == 'Pending' %}
+        <div class="grid grid--2">
+          <div class="kv"><span class="kv__key">Source Schedule Day</span><span class="kv__val" data-fill="source">—</span></div>
+          <div class="kv"><span class="kv__key">New Collection Date</span><span class="kv__val" data-fill="newdate">—</span></div>
+          <div class="kv"><span class="kv__key">Waste Type</span><span class="kv__val" data-fill="waste">—</span></div>
+          <div class="kv"><span class="kv__key">Status</span><span class="kv__val" data-fill="status">—</span></div>
+          <div class="kv"><span class="kv__key">Original Truck</span><span class="kv__val" data-fill="original">—</span></div>
+          <div class="kv"><span class="kv__key">Current Truck</span><span class="kv__val" data-fill="current">—</span></div>
+          <div class="kv">
+            <span class="kv__key">Load</span>
+            <span class="kv__val" data-fill="total">—</span>
+            <span class="sub">Still in the MRF — it is only counted when collected.</span>
+          </div>
+        </div>
+        <div class="kv" style="margin-top:var(--sp-3)">
+          <span class="kv__key">Date of missed pick-up</span>
+          <span class="kv__val text-sm" data-fill="misses">—</span>
+        </div>
+
+      {% else %}
+        <div class="grid grid--2">
+          <div class="kv"><span class="kv__key">Date</span><span class="kv__val" data-fill="date">—</span></div>
+          <div class="kv"><span class="kv__key">Time</span><span class="kv__val" data-fill="time">—</span></div>
+          <div class="kv"><span class="kv__key">Source Schedule Day</span><span class="kv__val" data-fill="source">—</span></div>
+          <div class="kv"><span class="kv__key">Waste Type</span><span class="kv__val" data-fill="waste">—</span></div>
+
+          {% if selected_status == 'Collected' %}
+            <div class="kv"><span class="kv__key">Original Truck</span><span class="kv__val" data-fill="original">—</span></div>
+            <div class="kv"><span class="kv__key">Current Truck</span><span class="kv__val" data-fill="current">—</span></div>
+          {% else %}
+            <div class="kv"><span class="kv__key">Assigned Truck</span><span class="kv__val" data-fill="assigned">—</span></div>
+            <div class="kv"><span class="kv__key">Operator</span><span class="kv__val" data-fill="operator">—</span></div>
+          {% endif %}
+
+          <div class="kv">
+            <span class="kv__key">Load</span>
+            <span class="kv__val" data-fill="total">—</span>
+            {% if selected_status != 'Collected' %}
+              <span class="sub">Still in the MRF — it is only counted when collected.</span>
+            {% endif %}
+          </div>
+          <div class="kv">
+            <span class="kv__key">Status</span>
+            <span class="kv__val" data-fill="status">—</span>
+            <span class="sub" data-fill="missing" data-show-when-set="missing"></span>
+          </div>
+          <div class="kv"><span class="kv__key">Reason</span><span class="kv__val" data-fill="reason">—</span></div>
+          {% if selected_status == 'Collected' %}
+            <div class="kv"><span class="kv__key">Missed before this</span><span class="kv__val text-sm" data-fill="misses">—</span></div>
+          {% endif %}
+        </div>
+
+        <div class="kv" style="margin-top:var(--sp-3)">
+          <span class="kv__key">Location</span>
+          <span class="kv__val">
+            <span data-fill="place">—</span>
+            <span class="sub"><span class="mono" data-fill="coords">—</span>
+              · <span data-fill="coordsource">—</span></span>
+          </span>
+        </div>
+
+        <div class="kv" style="margin-top:var(--sp-3)">
+          <span class="kv__key">Note</span>
+          <span class="kv__val text-sm" data-fill="note">—</span>
+        </div>
+      {% endif %}
+    </div>
+    <div class="modal__foot">
+      <button type="button" class="btn btn--secondary" data-modal-close>Close</button>
+    </div>
+  </div>
+</div>
+
+{# ---- Reassign --------------------------------------------------------- #}
+<div class="modal" id="carry-reassign" data-open="false" role="dialog"
+     aria-modal="true" aria-labelledby="carry-reassign-title" aria-hidden="true">
+  <form class="modal__panel" method="post" data-validate novalidate>
+    {{ csrf_field() }}
+    <input type="hidden" name="action" value="reassign">
+    <input type="hidden" name="id" data-fill-value="id">
+
+    <div class="modal__head">
+      <h2 id="carry-reassign-title">Reassign <span data-fill="title">carry-over</span></h2>
+      <button type="button" class="btn btn--icon" data-modal-close aria-label="Close dialog">
+        {{ icon('x', 'icon--sm') }}
+      </button>
+    </div>
+
+    <div class="modal__body stack">
+      <p class="text-sm muted">
+        The chosen truck will see this MRF as a pending pickup, on top of its
+        normal route.
+      </p>
+      <div class="field">
+        <label class="field__label" for="reassign_truck">
+          Truck<span class="field__req" aria-hidden="true">*</span>
+        </label>
+        <select class="field__select" id="reassign_truck" name="truck" required>
+          <option value="">Select truck…</option>
+          {% for code in trucks %}<option value="{{ code }}">{{ code }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="modal__foot">
+      <button type="button" class="btn btn--secondary" data-modal-close>Cancel</button>
+      <button type="submit" class="btn btn--primary">
+        {{ icon('check', 'icon--sm') }} Reassign
+      </button>
+    </div>
+  </form>
+</div>
+
+{# ---- Reschedule ------------------------------------------------------- #}
+<div class="modal" id="carry-reschedule" data-open="false" role="dialog"
+     aria-modal="true" aria-labelledby="carry-reschedule-title" aria-hidden="true">
+  <form class="modal__panel" method="post" data-validate novalidate>
+    {{ csrf_field() }}
+    <input type="hidden" name="action" value="reschedule">
+    <input type="hidden" name="id" data-fill-value="id">
+
+    <div class="modal__head">
+      <h2 id="carry-reschedule-title">Reschedule <span data-fill="title">carry-over</span></h2>
+      <button type="button" class="btn btn--icon" data-modal-close aria-label="Close dialog">
+        {{ icon('x', 'icon--sm') }}
+      </button>
+    </div>
+
+    <div class="modal__body stack">
+      <p class="text-sm muted">
+        The assigned truck sees this pickup from the chosen date onward.
+      </p>
+      <div class="field">
+        <label class="field__label" for="reschedule_date">
+          New collection date<span class="field__req" aria-hidden="true">*</span>
+        </label>
+        <input class="field__input" type="date" id="reschedule_date"
+               name="reschedule_date" required min="{{ today }}">
+      </div>
+    </div>
+
+    <div class="modal__foot">
+      <button type="button" class="btn btn--secondary" data-modal-close>Cancel</button>
+      <button type="submit" class="btn btn--primary">
+        {{ icon('calendar', 'icon--sm') }} Reschedule
+      </button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

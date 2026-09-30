@@ -1,0 +1,107 @@
+{% from 'partials/icons.html' import icon %}
+
+{# ===========================================================================
+   Live tracking map.
+
+   Every coordinate and boundary is fetched at runtime from
+   /api/geo/* and /api/live/vehicles -- there is none in this template and
+   none in map.js, so real barangay data drops into data/geo/ with no code
+   change (see docs/DATA_REQUIREMENTS.md).
+
+   Optional: map_title, map_barangays (list of (id, name)), map_scope,
+             show_tabs, show_barangay_filter, map_height,
+             map_locate (open on the viewer's own position), map_locate_zoom,
+             map_follow (a vehicle code -- track this device and keep the
+             map on it; for the collector looking at their own route),
+             map_mrfs (barangay ids -- show only these MRFs, e.g. a truck's
+             covered route; the barangay filter narrows it further),
+             show_mrfs (false leaves the MRF layer off entirely -- the
+             tricycle collector's map)
+   =========================================================================== #}
+
+<div class="map" data-map
+     {% if map_scope %}data-map-scope="{{ map_scope }}"{% endif %}
+     {% if map_locate or map_follow %}data-map-locate="{{ map_locate_zoom|default(16) }}"{% endif %}
+     {% if map_follow %}data-map-follow="{{ map_follow }}"{% endif %}
+     {% if map_mrfs %}data-map-mrfs="{{ map_mrfs|join(',') }}"{% endif %}
+     {% if not show_mrfs|default(true) %}data-map-no-mrfs{% endif %}
+     {% if locked_barangay %}data-map-barangay="{{ locked_barangay }}"{% endif %}>
+
+  <div class="map__head">
+    <span class="map__label">{{ map_title|default('Live Tracking') }}</span>
+
+    {% if show_tabs|default(true) %}
+      <div class="segmented" role="tablist" aria-label="Filter tracked vehicles">
+        <button type="button" class="segmented__btn" role="tab"
+                aria-selected="true" data-map-tab="all">All</button>
+        <button type="button" class="segmented__btn" role="tab"
+                aria-selected="false" data-map-tab="tricycles">Tricycles</button>
+        <button type="button" class="segmented__btn" role="tab"
+                aria-selected="false" data-map-tab="trucks">Trucks</button>
+      </div>
+    {% endif %}
+
+    {% if show_barangay_filter and map_barangays %}
+      <div class="field">
+        <label class="sr-only" for="map-barangay">Filter by barangay</label>
+        <select class="field__select" id="map-barangay" data-map-barangay>
+          <option value="">All Barangays</option>
+          {% for value, label in map_barangays %}
+            <option value="{{ value }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    {% endif %}
+
+    <button type="button" class="btn btn--icon" data-map-fullscreen
+            aria-pressed="false" aria-label="Toggle fullscreen map" style="color:#fff">
+      {{ icon('expand', 'icon--sm') }}
+    </button>
+  </div>
+
+  {# Height comes from CSS and scales with the viewport. `map_size='tall'` is
+     for pages where the map is the main content; `map_height` still forces an
+     exact value if a page ever needs one. #}
+  <div class="map__canvas{% if map_size == 'tall' %} map__canvas--tall{% endif %}"
+       data-map-canvas
+       {% if map_height %}style="height:{{ map_height }}"{% endif %}
+       role="application"
+       aria-label="Live map of Cabadbaran City showing collectors on duty">
+  </div>
+
+  {# What the current filter is actually showing, in words. An empty map has
+     to say why it is empty -- "no tricycle on duty in Poblacion 1" is an
+     answer; a blank rectangle is not. #}
+  <p class="map__summary" data-map-summary role="status" aria-live="polite"></p>
+
+  {# Shown when the geo files are still placeholders, so an empty map reads as
+     "no data loaded yet" rather than as a failure. #}
+  <p class="map__note" data-map-note role="status"></p>
+
+  <div class="map__legend" data-map-legend>
+    {# The glyph, not a colour swatch: each vehicle carries its own colour
+       now, so the shape is what a kind is recognised by. #}
+    <span class="map__legend-item">
+      {{ icon('tricycle', 'map__legend-glyph') }}
+      <strong data-legend="tricycles">0</strong> Tricycles Active
+    </span>
+    <span class="map__legend-item">
+      {{ icon('truck', 'map__legend-glyph') }}
+      <strong data-legend="trucks">0</strong> Trucks Active
+    </span>
+    {% if show_mrfs|default(true) %}
+      <span class="map__legend-item">
+        <span class="map__legend-mrf" aria-hidden="true">{{ icon('recycle', 'map__legend-glyph') }}</span>
+        <strong data-legend="mrfs">0</strong> MRFs
+      </span>
+    {% endif %}
+    <span class="map__legend-item">
+      <span class="map__legend-dot map__legend-dot--zone" aria-hidden="true"></span>
+      <strong data-legend="barangays">0</strong> Barangays
+    </span>
+    <span class="map__legend-item map__legend-item--live">
+      <span class="map__legend-pulse" aria-hidden="true"></span> Live Updates
+    </span>
+    <span class="map__legend-item text-xs muted" data-legend="stale" hidden></span>
+  </div>
+</div>
